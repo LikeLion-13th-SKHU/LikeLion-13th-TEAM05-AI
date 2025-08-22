@@ -1,4 +1,4 @@
-# app.py — minimal clean version
+# app.py — trimmed
 import os, hashlib, pathlib
 from typing import Any, Dict, List, Optional, Literal
 from fastapi import FastAPI, HTTPException, Depends, Header
@@ -29,7 +29,7 @@ try:
 except Exception:
     pick_ids_json = None
 
-app = FastAPI(title="ArtPick AI (new field names)", version="6.5.1")
+app = FastAPI(title="ArtPick AI (new field names)", version="6.5.2")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
@@ -62,7 +62,7 @@ class DayMonthPikIn(BaseModel):
     weather: str | int | None = None
 
 class DayMonthPikOut(BaseModel):
-    recommendedCultureIds: List[Any]
+    recommendedCultureIds: List[int]
 
 @app.get("/health")
 def health():
@@ -121,4 +121,11 @@ def day_month_pik_route(body: DayMonthPikIn):
         interest_categories=body.userInterests or [],
         weather=body.weather
     )
-    return DayMonthPikOut(**result)
+    raw_ids = result.get("recommendedCultureIds", [])
+    ids = []
+    for x in raw_ids:
+        try:
+            ids.append(int(x))
+        except Exception:
+            continue
+    return DayMonthPikOut(recommendedCultureIds=ids)

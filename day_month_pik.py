@@ -1,4 +1,4 @@
-# day_month_pik.py
+# day_month_pik.py — clean & strict int IDs
 import os, math, re
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta, date
@@ -7,6 +7,9 @@ import requests
 
 WEATHER_KEY = os.environ.get("weather_API_KEY")
 
+# -----------------------
+# 시간/날짜 유틸
+# -----------------------
 def _now_kr() -> datetime:
     return datetime.now(ZoneInfo("Asia/Seoul"))
 
@@ -27,18 +30,28 @@ def parse_date(s: Any) -> Optional[date]:
     if not s: return None
     s = str(s).strip()
     for fmt in ("%Y-%m-%d", "%Y%m%d"):
-        try: return datetime.strptime(s[:len(fmt)], fmt).date()
-        except Exception: pass
+        try:
+            return datetime.strptime(s[:len(fmt)], fmt).date()
+        except Exception:
+            pass
     return None
 
 def to_float(x: Any, default: Optional[float]=None) -> Optional[float]:
-    try: return float(x)
-    except Exception: return default
+    try:
+        return float(x)
+    except Exception:
+        return default
 
+# -----------------------
+# 텍스트/토크나이즈
+# -----------------------
 def tokenize(text: str) -> List[str]:
     if not text: return []
     return re.findall(r"[가-힣a-z0-9]+", text.lower())
 
+# -----------------------
+# 거리 계산
+# -----------------------
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
     R = 6371.0
     from math import radians, sin, cos, asin, sqrt
@@ -47,12 +60,19 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
     return 2 * R * asin(sqrt(a))
 
 # -----------------------
-# 🔁 스키마 정규화
+# 스키마 정규화 + ID 정수 보정
 # -----------------------
+def _to_int_id(x):
+    try:
+        return int(x)
+    except Exception:
+        return None
+
 def norm_post(p: Dict[str, Any]) -> Dict[str, Any]:
     """외부 스키마(예: contents/startDate/viewCount ...)를 내부 공통 키로 통일"""
+    pid = _to_int_id(p.get("id") or p.get("postId"))
     return {
-        "id":            p.get("id") or p.get("postId"),
+        "id":            pid,
         "title":         p.get("title"),
         "content":       p.get("contents") or p.get("content") or "",
         "area":          p.get("area") or "",
@@ -72,6 +92,9 @@ def norm_post(p: Dict[str, Any]) -> Dict[str, Any]:
         "reviews":       p.get("reviews") or [],
     }
 
+# -----------------------
+# 감성/실내외 판별
+# -----------------------
 EMO_MAP = {
     "조용한": ["조용","차분","한적","고요","잔잔","힐링","명상","서정","잔잔한"],
     "신나는": ["신나","라이브","댄스","밴드","페스티벌","흥겨운","업템포","디제잉","edm","불꽃"],
@@ -116,6 +139,9 @@ def normalize_category(s: Optional[str]) -> Optional[str]:
     if "축제" in s or "festival" in s or "페스티벌" in s: return "축제"
     return s
 
+# -----------------------
+# 평판/인기도
+# -----------------------
 def popularity_score(p: Dict[str, Any]) -> float:
     n = norm_post(p)
     vc = float(n["view_count"] or 0)
@@ -138,11 +164,15 @@ def rating_tuple(p: Dict[str, Any]):
             avg_rating = 0.0
     return (avg_rating or 0.0), review_count
 
-# ---------- KMA (PTY) ----------
+# -----------------------
+# KMA (PTY: 강수형태)
+# -----------------------
 def parse_pty(pty: Any) -> Optional[int]:
     if pty is None: return None
-    try: return int(str(pty).strip())
-    except Exception: return None
+    try:
+        return int(str(pty).strip())
+    except Exception:
+        return None
 
 def latlon_to_grid(lat: float, lon: float) -> Tuple[int, int]:
     RE = 6371.00877; GRID = 5.0
@@ -213,6 +243,9 @@ def weather_suitability(pty: Optional[int], indoor_score: float, outdoor_score: 
     if pty == 0:    return max(indoor_score, outdoor_score)
     return indoor_score
 
+# -----------------------
+# 가중치/윈도우/시간점수
+# -----------------------
 def spotlight_weights(mode: str, weather_active: bool) -> Dict[str, float]:
     if mode == "DAILY":
         return dict(time=0.25, weather=(0.15 if weather_active else 0.0),
@@ -248,6 +281,9 @@ def time_score(p: Dict[str, Any], mode: str, today: date) -> float:
     if delta <= 14: return 0.7
     return 0.55
 
+# -----------------------
+# 개별 게시글 점수 계산
+# -----------------------
 def score_post_spotlight(
     p: Dict[str, Any], mode: str, center: Optional[Dict[str, float]],
     radius_km: Optional[float], interests: List[str],
@@ -258,6 +294,9 @@ def score_post_spotlight(
         return None
 
     n = norm_post(p)
+    if n["id"] is None:    # ❗ id 없으면 채택하지 않음
+        return None
+
     t_score = time_score(p, mode, today)
 
     # 거리(좌표 없으면 0)
@@ -294,6 +333,9 @@ def score_post_spotlight(
 
     return (round(score,4), n["id"])
 
+# -----------------------
+# 메인: 상단 N개 ID만 반환 (정수)
+# -----------------------
 def pick_ids_json(
     mode: str, posts: List[Dict[str, Any]], top_k: int = 10,
     interest_categories: List[str] | None = None,
@@ -301,7 +343,7 @@ def pick_ids_json(
     radius_km: float | None = None,
     weather: Any | None = None,
     auto_weather: bool = True
-) -> Dict[str, List[Any]]:
+) -> Dict[str, List[int]]:
     mode = (mode or "DAILY").upper()
     if mode not in ("DAILY","MONTHLY"):
         mode = "DAILY"
@@ -328,5 +370,12 @@ def pick_ids_json(
                 scored.append((score, pid))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    ids = [pid for _, pid in scored[:max(1, int(top_k))]]
+
+    ids: List[int] = []
+    for _, pid in scored[:max(1, int(top_k))]:
+        try:
+            ids.append(int(pid))
+        except Exception:
+            continue
+
     return {"recommendedCultureIds": ids}
