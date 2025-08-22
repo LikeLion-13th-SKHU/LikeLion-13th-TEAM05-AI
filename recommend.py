@@ -262,12 +262,11 @@ def recommend_json(message: str, keywords: Dict[str, Any], posts: List[Dict[str,
     items = [x[1] for x in scored[:max(1, top_k)]]
     return {"items": items, "debug": {"query": q, "weights": weights, "count_in": len(posts), "count_scored": len(scored)}}
 
+# recommend.py
 def render_answer_json(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     요청: {"message": "...", "result": {"items":[...]}}
-    응답: {"answer": "<제목만 줄바꿈 리스트>"}
-    - 제목만 출력 (위치/이유 등 부가정보 제거)
-    - 제목이 비어있으면 id로 대체
+    응답: {"answer": "제목1, 제목2, 제목3"}  # 줄바꿈 없이, 제목만
     """
     result = payload.get("result", {}) or {}
     items  = result.get("items", []) or []
@@ -278,9 +277,8 @@ def render_answer_json(payload: Dict[str, Any]) -> Dict[str, Any]:
     for it in items:
         title = (it.get("title") or "").strip()
         if not title:
-            fallback = it.get("id")
-            title = f"ID {fallback}" if fallback is not None else "제목 미상"
+            fid = it.get("id")
+            title = f"ID {fid}" if fid is not None else "제목 미상"
         titles.append(title)
 
- 
-    return {"answer": "\n".join(f"- {t}" for t in titles)}
+    return {"answer": ", ".join(titles)}
