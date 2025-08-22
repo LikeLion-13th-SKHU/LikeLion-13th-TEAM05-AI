@@ -1,11 +1,10 @@
-# app.py — trimmed
 import os, hashlib, pathlib
 from typing import Any, Dict, List, Optional, Literal
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from dotenv import load_dotenv, find_dotenv
-from fastapi.responses import PlainTextResponse 
 
 load_dotenv(find_dotenv())
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
@@ -20,10 +19,10 @@ except Exception:
     classify_intent = None
 
 try:
-    from recommend import recommend_json, render_titles_plain
+    from recommend import recommend_json, render_titles_sentence
 except Exception:
     recommend_json = None
-    render_titles_plain = None
+    render_titles_sentence = None
 
 try:
     from day_month_pik import pick_ids_json
@@ -50,9 +49,6 @@ class AskIn(BaseModel):
     userId: int | None = None
     timestamp: str | None = None
     meta: Dict[str, Any] | None = None
-
-class AnswerOut(BaseModel):
-    answer: str
 
 class DayMonthPikIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -101,9 +97,8 @@ def ask(body: AskIn):
         top_k=body.requestCount
     )
 
-    # 제목만, 특수문자 제거해 한 줄로 반환
-    if render_titles_plain:
-        return render_titles_plain({"message": body.message, "result": result})
+    if render_titles_sentence:
+        return render_titles_sentence({"message": body.message, "result": result})
     return "추천 결과를 확인하세요."
 
 @app.post("/day_month_pik", response_model=DayMonthPikOut, dependencies=[Depends(verify)])
@@ -121,10 +116,11 @@ def day_month_pik_route(body: DayMonthPikIn):
         weather=body.weather
     )
     raw_ids = result.get("recommendedCultureIds", [])
-    ids = []
+    ids: List[int] = []
     for x in raw_ids:
         try:
             ids.append(int(x))
         except Exception:
             continue
     return DayMonthPikOut(recommendedCultureIds=ids)
+
