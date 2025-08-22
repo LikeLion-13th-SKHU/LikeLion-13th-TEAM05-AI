@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from dotenv import load_dotenv, find_dotenv
+from fastapi.responses import PlainTextResponse 
 
 load_dotenv(find_dotenv())
 INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
@@ -19,10 +20,10 @@ except Exception:
     classify_intent = None
 
 try:
-    from recommend import recommend_json, render_answer_json
+    from recommend import recommend_json, render_titles_plain
 except Exception:
     recommend_json = None
-    render_answer_json = None
+    render_titles_plain = None
 
 try:
     from day_month_pik import pick_ids_json
@@ -72,10 +73,10 @@ def health():
 def root():
     return {"status": "ok", "service": "ArtPick AI", "app_sig": APP_SIG}
 
-@app.post("/ask", response_model=AnswerOut, dependencies=[Depends(verify)])
+@app.post("/ask", dependencies=[Depends(verify)], response_class=PlainTextResponse)
 def ask(body: AskIn):
     if not body.cultures:
-        return AnswerOut(answer="게시글 목록(cultures)이 비어 있어요. 후보 목록을 함께 보내주세요.")
+        return "게시글 목록(cultures)이 비어 있어요. 후보 목록을 함께 보내주세요."
     if classify_intent is None:
         raise HTTPException(500, "discriminate.classify_intent가 없습니다.")
     if recommend_json is None:
@@ -100,12 +101,10 @@ def ask(body: AskIn):
         top_k=body.requestCount
     )
 
-    if render_answer_json:
-        wrapped = render_answer_json({"message": body.message, "result": result}) or {}
-        answer = wrapped.get("answer") or "추천 결과를 확인하세요."
-    else:
-        answer = "추천 결과를 확인하세요."
-    return AnswerOut(answer=str(answer))
+    # 제목만, 특수문자 제거해 한 줄로 반환
+    if render_titles_plain:
+        return render_titles_plain({"message": body.message, "result": result})
+    return "추천 결과를 확인하세요."
 
 @app.post("/day_month_pik", response_model=DayMonthPikOut, dependencies=[Depends(verify)])
 def day_month_pik_route(body: DayMonthPikIn):

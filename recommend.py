@@ -2,6 +2,7 @@
 import math, re
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional, Tuple
+import re, html
 
 def parse_date(s: Optional[str]) -> Optional[date]:
     if not s: return None
@@ -262,23 +263,35 @@ def recommend_json(message: str, keywords: Dict[str, Any], posts: List[Dict[str,
     items = [x[1] for x in scored[:max(1, top_k)]]
     return {"items": items, "debug": {"query": q, "weights": weights, "count_in": len(posts), "count_scored": len(scored)}}
 
-# recommend.py
-def render_answer_json(payload: Dict[str, Any]) -> Dict[str, Any]:
+def render_titles_plain(payload: Dict[str, Any]) -> str:
     """
-    요청: {"message": "...", "result": {"items":[...]}}
-    응답: {"answer": "제목1, 제목2, 제목3"}  # 줄바꿈 없이, 제목만
+    요청: {"message":"...", "result":{"items":[{"id":..,"title":"..."}, ...]}}
+    응답: "제목1, 제목2, 제목3"   # 줄바꿈 없음, 쉼표만 구분자, 특수문자 제거(, 제외)
     """
-    result = payload.get("result", {}) or {}
-    items  = result.get("items", []) or []
+    result = payload.get("result") or {}
+    items  = result.get("items") or []
     if not items:
-        return {"answer": "추천 가능한 게시글이 없어요."}
+        return "추천 가능한 게시글이 없어요."
 
     titles: List[str] = []
     for it in items:
-        title = (it.get("title") or "").strip()
-        if not title:
+        t = (it.get("title") or "").strip()
+        if not t:
             fid = it.get("id")
-            title = f"ID {fid}" if fid is not None else "제목 미상"
-        titles.append(title)
+            t = f"ID{fid}" if fid is not None else ""
+        if t:
+            titles.append(t)
 
-    return {"answer": ", ".join(titles)}
+    # 1) 기본 조인
+    s = ", ".join(titles)
+
+    # 2) HTML 엔티티 해제 (예: &#39; -> ')
+    s = html.unescape(s)
+
+    # 3) 특수문자 제거: 한글/영문/숫자/공백/쉼표만 허용
+    #    대괄호, 따옴표 등은 제거됨
+    s = re.sub(r"[^가-힣a-zA-Z0-9 ,]", "", s)
+
+    # 4) 쉼표 주변 공백/중복 정리
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    return ", ".join(parts)
