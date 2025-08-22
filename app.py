@@ -1,6 +1,6 @@
 # app.py — keep /ask AND add /day_month_pik
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -57,7 +57,7 @@ class AnswerOut(BaseModel):
 
 # --- /day_month_pik ---
 class DayMonthPikIn(BaseModel):
-    mode: str = Field(..., regex="^(DAILY|MONTHLY)$", description="DAILY 또는 MONTHLY")
+    mode: Literal["DAILY", "MONTHLY"] = Field(..., description="DAILY 또는 MONTHLY") 
     posts: List[Dict[str, Any]] = Field(..., description="후보 게시글 배열(필수)")
     top_k: int = 10
     interest_categories: List[str] | None = Field(default=None, description="예: ['전시','공연']")
