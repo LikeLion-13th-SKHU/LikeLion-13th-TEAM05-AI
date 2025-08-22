@@ -52,7 +52,7 @@ class AskIn(BaseModel):
 
 class DayMonthPikIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    type: Literal["DAILY", "MONTHLY"] = Field(..., validation_alias=AliasChoices("type", "mode"))
+    type: str = Field(..., validation_alias=AliasChoices("type", "mode"))
     cultures: List[Dict[str, Any]]
     requestCount: int = 10
     userInterests: List[str] | None = None
@@ -108,8 +108,16 @@ def day_month_pik_route(body: DayMonthPikIn):
     if not body.cultures:
         return DayMonthPikOut(recommendedCultureIds=[])
 
+    t = (body.type or "").strip().lower()
+    if t in ("today", "daily"):
+        mode = "DAILY"
+    elif t in ("monthly", "month", "this_month"):
+        mode = "MONTHLY"
+    else:
+        mode = "DAILY"
+
     result = pick_ids_json(
-        mode=body.type,
+        mode=mode,
         posts=body.cultures,
         top_k=body.requestCount,
         interest_categories=body.userInterests or [],
@@ -123,4 +131,3 @@ def day_month_pik_route(body: DayMonthPikIn):
         except Exception:
             continue
     return DayMonthPikOut(recommendedCultureIds=ids)
-
