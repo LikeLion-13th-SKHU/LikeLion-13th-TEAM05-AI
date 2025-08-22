@@ -263,25 +263,24 @@ def recommend_json(message: str, keywords: Dict[str, Any], posts: List[Dict[str,
     return {"items": items, "debug": {"query": q, "weights": weights, "count_in": len(posts), "count_scored": len(scored)}}
 
 def render_answer_json(payload: Dict[str, Any]) -> Dict[str, Any]:
-    result = payload.get("result", {})
-    items  = result.get("items", [])
+    """
+    요청: {"message": "...", "result": {"items":[...]}}
+    응답: {"answer": "<제목만 줄바꿈 리스트>"}
+    - 제목만 출력 (위치/이유 등 부가정보 제거)
+    - 제목이 비어있으면 id로 대체
+    """
+    result = payload.get("result", {}) or {}
+    items  = result.get("items", []) or []
     if not items:
-        return {"answer": "조건에 맞는 후보를 찾지 못했습니다. 위치/날짜/유형을 더 구체적으로 알려주세요."}
+        return {"answer": "추천 가능한 게시글이 없어요."}
 
-    lines = []
+    titles: List[str] = []
     for it in items:
-        reason = []
-        pty = it.get("pty"); inout = it.get("inout")
-        if pty is not None:
-            if pty == 0 and inout != "mixed":
-                reason.append(f"{'야외' if inout=='outdoor' else '실내'} 적합(쾌청)")
-            elif pty != 0 and inout == "indoor":
-                reason.append("실내 추천(강수 대비)")
-        if it.get("avg_rating",0) >= 4.2 and it.get("review_count",0) >= 5: reason.append("평점 우수")
-        if it.get("distance_km") is not None and it["distance_km"] <= 2: reason.append("가까움")
-        if it.get("like_count",0) >= 50: reason.append("인기")
+        title = (it.get("title") or "").strip()
+        if not title:
+            fallback = it.get("id")
+            title = f"ID {fallback}" if fallback is not None else "제목 미상"
+        titles.append(title)
 
-        loc = it.get("addr") or (" ".join([str(it.get("area") or ""), str(it.get("sigungu") or "")]).strip())
-        lines.append(f"- {it.get('title')} - {loc} — " + (" · ".join(reason) if reason else "조건 부합"))
-
-    return {"answer": "추천 드려요:\n" + "\n".join(lines)}
+ 
+    return {"answer": "\n".join(f"- {t}" for t in titles)}
